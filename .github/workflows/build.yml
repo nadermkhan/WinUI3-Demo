@@ -10,7 +10,6 @@ env:
   SOLUTION_FILE_PATH: HelloWorldApp.sln
   BUILD_CONFIGURATION: Release
   BUILD_PLATFORM: x64
-  WINDOWS_APP_SDK_VERSION: 1.4.231008000
 
 jobs:
   build:
@@ -26,8 +25,15 @@ jobs:
     - name: Setup NuGet
       uses: NuGet/setup-nuget@v2
 
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '6.0.x'
+
     - name: Restore NuGet packages
-      run: nuget restore ${{ env.SOLUTION_FILE_PATH }}
+      run: |
+        nuget restore ${{ env.SOLUTION_FILE_PATH }} -ConfigFile nuget.config
+        msbuild ${{ env.SOLUTION_FILE_PATH }} /t:Restore /p:Configuration=${{ env.BUILD_CONFIGURATION }} /p:Platform=${{ env.BUILD_PLATFORM }}
 
     - name: Decode the certificate
       run: |
@@ -36,10 +42,21 @@ jobs:
         [IO.File]::WriteAllBytes("$certificatePath", $pfx_cert_byte)
 
     - name: Build the solution
-      run: msbuild ${{ env.SOLUTION_FILE_PATH }} /p:Configuration=${{ env.BUILD_CONFIGURATION }} /p:Platform=${{ env.BUILD_PLATFORM }} /p:AppxBundlePlatforms=${{ env.BUILD_PLATFORM }} /p:AppxPackageDir=${{ github.workspace }}\AppPackages\ /p:AppxBundle=Never /p:UapAppxPackageBuildMode=SideloadOnly /p:AppxPackageSigningEnabled=true /p:PackageCertificateKeyFile=${{ github.workspace }}\GitHubActionsWorkflow.pfx /p:PackageCertificatePassword=${{ secrets.PFX_PASSWORD }}
+      run: |
+        msbuild ${{ env.SOLUTION_FILE_PATH }} `
+          /p:Configuration=${{ env.BUILD_CONFIGURATION }} `
+          /p:Platform=${{ env.BUILD_PLATFORM }} `
+          /p:AppxBundlePlatforms=${{ env.BUILD_PLATFORM }} `
+          /p:AppxPackageDir="${{ github.workspace }}\AppPackages\" `
+          /p:AppxBundle=Never `
+          /p:UapAppxPackageBuildMode=SideloadOnly `
+          /p:AppxPackageSigningEnabled=true `
+          /p:PackageCertificateKeyFile="${{ github.workspace }}\GitHubActionsWorkflow.pfx" `
+          /p:PackageCertificatePassword="${{ secrets.PFX_PASSWORD }}"
 
     - name: Remove the certificate
-      run: Remove-Item -path ${{ github.workspace }}\GitHubActionsWorkflow.pfx
+      run: Remove-Item -path "${{ github.workspace }}\GitHubActionsWorkflow.pfx"
+      if: always()
 
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
